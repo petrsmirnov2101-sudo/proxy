@@ -1,5 +1,7 @@
 const https = require('https');
-const http = require('http');
+const http  = require('http');
+
+/* ── Вспомогательные функции ── */
 
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
@@ -38,6 +40,8 @@ function extractFilename(path) {
   return parts[parts.length - 1] || 'download';
 }
 
+/* ── Основной обработчик ── */
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -47,9 +51,10 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
-  var action = req.query.action;
+  var action     = req.query.action;
   var public_key = req.query.public_key;
-  var path = req.query.path;
+  var path       = req.query.path;
+  var fname      = req.query.filename;          // ★ НОВОЕ: имя файла из UI
 
   if (!action || !public_key) {
     return res.status(400).json({ error: 'Missing action or public_key' });
@@ -90,12 +95,12 @@ module.exports = async (req, res) => {
       var fileStream = await fetchStream(apiResult.body.href);
 
       // Шаг 3: определяем имя файла
-      var filename = extractFilename(path);
+      // Приоритет: query-параметр > путь > фоллбэк
+      var filename = fname || extractFilename(path);
 
-      // Шаг 4: пробрасываем заголовки от Яндекса
+      // Шаг 4: заголовки
       var ct = fileStream.headers['content-type'];
       var cl = fileStream.headers['content-length'];
-      var cd = fileStream.headers['content-disposition'];
 
       if (ct) {
         res.setHeader('Content-Type', ct);
@@ -107,11 +112,12 @@ module.exports = async (req, res) => {
         res.setHeader('Content-Length', cl);
       }
 
-      if (cd) {
-        res.setHeader('Content-Disposition', cd);
-      } else {
-        res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(filename) + '"');
-      }
+      // ★ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: двойной формат для поддержки кириллицы
+      var encoded = encodeURIComponent(filename);
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename="' + encoded + '"; filename*=UTF-8\'\'' + encoded
+      );
 
       // Шаг 5: стримим файл клиенту
       res.status(fileStream.statusCode || 200);
