@@ -78,7 +78,7 @@
       if (!items) {
         // Это файл, а не папка — сразу качаем
         list.innerHTML = '<div class="status">Это файл: ' + (data.name || '?') + '. Получаю ссылку...</div>';
-        downloadFile(currentPath);
+        (currentPath);
         return;
       }
 
@@ -130,7 +130,6 @@
     if (path && path !== '/') params.set('path', path);
     window.open('/api/proxy?' + params.toString(), '_blank');
   }
-
 
   function renderBreadcrumbs() {
     const bc = document.getElementById('breadcrumbs');
