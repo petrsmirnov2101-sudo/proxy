@@ -101,7 +101,7 @@
           ? 'onclick="navigate(\'' + escapeAttr(item.path) + '\')"'
           : '';
         const dlBtn = item.type !== 'dir'
-          ? '<button class="download-btn" onclick="event.stopPropagation(); downloadFile(\'' + escapeAttr(item.path) + '\')">Скачать</button>'
+          ? '<button class="download-btn" onclick="event.stopPropagation(); (\'' + escapeAttr(item.path) + '\')">Скачать</button>'
           : '';
 
         html += '<div class="file-item" ' + action + '>'
@@ -126,21 +126,11 @@
   }
 
   async function downloadFile(path) {
-    const params = new URLSearchParams({ action: 'download', public_key: currentKey });
+    const params = new URLSearchParams({ action: 'fetch', public_key: currentKey });
     if (path && path !== '/') params.set('path', path);
-
-    try {
-      const resp = await fetch('/api/proxy?' + params.toString());
-      const data = await resp.json();
-      if (data.href) {
-        window.open(data.href, '_blank');
-      } else {
-        alert('Не удалось получить ссылку: ' + (data.error || data.message || JSON.stringify(data)));
-      }
-    } catch (err) {
-      alert('Ошибка: ' + err.message);
-    }
+    window.open('/api/proxy?' + params.toString(), '_blank');
   }
+
 
   function renderBreadcrumbs() {
     const bc = document.getElementById('breadcrumbs');
