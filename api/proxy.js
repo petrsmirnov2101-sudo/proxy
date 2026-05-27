@@ -1,19 +1,52 @@
-export default async function handler(req, res) {
+const https = require('https');
+
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, body: JSON.parse(data) });
+        } catch (e) {
+          resolve({ status: res.statusCode, body: data });
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+module.exports = async function handler(req, res) {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   const { action, public_key, path } = req.query;
 
-  let url = 'https://cloud-api.yandex.net/v1/disk/public/resources';
-  if (action === 'download') url += '/download';
+  if (!action || !public_key) {
+    return res.status(400).json({ error: 'Missing action or public_key' });
+  }
 
-  url += `?public_key=${encodeURIComponent(public_key)}`;
-  if (path) url += `&path=${encodeURIComponent(path)}`;
-  url += '&limit=100';
+  const encodedKey = encodeURIComponent(public_key);
 
   try {
-    const response = await fetch(url);
-    const data = await response.json();
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (action === 'list') {
+      const pathParam = path ? `&path=${encodeURIComponent(path)}` : '';
+      const url = `https://cloud-api.yandex.net/v1/disk/public/resources?public_key=${encodedKey}${pathParam}&limit=100`;
+      const result = await fetchJSON(url);
+      return res.status(result.status).json(result.body);
+    }
+
+    if (action === 'download') {
+      const pathParam = path ? `&path=${encodeURIComponent(path)}` : '';
+      const url = `https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=${encodedKey}${pathParam}`;
+      const result = await fetchJSON(url);
+      return res.status(result.status).json(result.body);
+    }
+
+    return res.status(400).json({ error: 'Unknown action. Use list or download' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
-}
+};
