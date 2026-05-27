@@ -18,14 +18,15 @@
   .breadcrumbs a { color: #0f9; cursor: pointer; text-decoration: none; }
   .breadcrumbs a:hover { text-decoration: underline; }
   .file-list { background: #16213e; border-radius: 12px; overflow: hidden; }
-  .file-item { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid #1a1a2e; cursor: pointer; transition: background 0.15s; }
+  .file-item { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid #1a1a2e; cursor: default; transition: background 0.15s; }
   .file-item:hover { background: #1a1a3e; }
   .file-item:last-child { border-bottom: none; }
+  .file-item.folder { cursor: pointer; }
   .file-icon { font-size: 24px; margin-right: 14px; flex-shrink: 0; }
   .file-info { flex: 1; min-width: 0; }
   .file-name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .file-size { font-size: 12px; color: #888; margin-top: 2px; }
-  .download-btn { padding: 6px 16px; border-radius: 6px; border: none; background: #0f9; color: #000; font-size: 13px; cursor: pointer; font-weight: 600; flex-shrink: 0; }
+  .download-btn { display: inline-block; padding: 6px 16px; border-radius: 6px; border: none; background: #0f9; color: #000; font-size: 13px; cursor: pointer; font-weight: 600; flex-shrink: 0; text-decoration: none; }
   .download-btn:hover { background: #0da; }
   .status { text-align: center; padding: 40px; color: #888; }
   .error { color: #e94560; }
@@ -46,8 +47,8 @@
 </div>
 
 <script>
-  let currentKey = '';
-  let currentPath = '/';
+  var currentKey = '';
+  var currentPath = '/';
 
   function openDisk() {
     currentKey = document.getElementById('urlInput').value.trim();
@@ -55,30 +56,35 @@
     loadFolder();
   }
 
+  function buildFetchUrl(path) {
+    var params = new URLSearchParams({ action: 'fetch', public_key: currentKey });
+    if (path && path !== '/') params.set('path', path);
+    return '/api/proxy?' + params.toString();
+  }
+
   async function loadFolder() {
-    const list = document.getElementById('fileList');
+    var list = document.getElementById('fileList');
     list.innerHTML = '<div class="status loading">⏳ Загрузка...</div>';
 
-    const params = new URLSearchParams({ action: 'list', public_key: currentKey });
+    var params = new URLSearchParams({ action: 'list', public_key: currentKey });
     if (currentPath && currentPath !== '/') params.set('path', currentPath);
 
     try {
-      const resp = await fetch('/api/proxy?' + params.toString());
-      const data = await resp.json();
+      var resp = await fetch('/api/proxy?' + params.toString());
+      var data = await resp.json();
 
       if (data.error || data.message) {
-        list.innerHTML = '<div class="status error">❌ ' + (data.error || data.message || 'Ошибка') + '</div>';
+        list.innerHTML = '<div class="status error">❌ ' + escapeHtml(data.error || data.message || 'Ошибка') + '</div>';
         return;
       }
 
       renderBreadcrumbs();
 
-      const items = data._embedded ? data._embedded.items : null;
+      var items = data._embedded ? data._embedded.items : null;
 
       if (!items) {
-        // Это файл, а не папка — сразу качаем
-        list.innerHTML = '<div class="status">Это файл: ' + (data.name || '?') + '. Получаю ссылку...</div>';
-        (currentPath);
+        list.innerHTML = '<div class="status">Это файл: ' + escapeHtml(data.name || '?') + '</div>';
+        window.location.href = buildFetchUrl(currentPath);
         return;
       }
 
@@ -87,34 +93,49 @@
         return;
       }
 
-      items.sort((a, b) => {
+      items.sort(function(a, b) {
         if (a.type === 'dir' && b.type !== 'dir') return -1;
         if (a.type !== 'dir' && b.type === 'dir') return 1;
         return a.name.localeCompare(b.name);
       });
 
-      let html = '';
-      items.forEach(item => {
-        const icon = item.type === 'dir' ? '📁' : getFileIcon(item.name);
-        const size = item.type === 'dir' ? '' : formatSize(item.size);
-        const action = item.type === 'dir'
-          ? 'onclick="navigate(\'' + escapeAttr(item.path) + '\')"'
-          : '';
-        const dlBtn = item.type !== 'dir'
-          ? '<button class="download-btn" onclick="event.stopPropagation(); (\'' + escapeAttr(item.path) + '\')">Скачать</button>'
-          : '';
+      var html = '';
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var icon = item.type === 'dir' ? '📁' : getFileIcon(item.name);
+        var size = item.type === 'dir' ? '' : formatSize(item.size);
 
-        html += '<div class="file-item" ' + action + '>'
-          + '<div class="file-icon">' + icon + '</div>'
-          + '<div class="file-info">'
-          + '<div class="file-name">' + escapeHtml(item.name) + '</div>'
-          + '<div class="file-size">' + size + '</div>'
-          + '</div>'
-          + dlBtn
-          + '</div>';
-      });
+        if (item.type === 'dir') {
+          html += '<div class="file-item folder" data-path="' + escapeHtml(item.path) + '">'
+            + '<div class="file-icon">' + icon + '</div>'
+            + '<div class="file-info">'
+            + '<div class="file-name">' + escapeHtml(item.name) + '</div>'
+            + '</div>'
+            + '</div>';
+        } else {
+          var dlUrl = buildFetchUrl(item.path);
+          html += '<div class="file-item">'
+            + '<div class="file-icon">' + icon + '</div>'
+            + '<div class="file-info">'
+            + '<div class="file-name">' + escapeHtml(item.name) + '</div>'
+            + '<div class="file-size">' + size + '</div>'
+            + '</div>'
+            + '<a class="download-btn" href="' + escapeHtml(dlUrl) + '" target="_blank" rel="noopener">Скачать</a>'
+            + '</div>';
+        }
+      }
 
       list.innerHTML = html;
+
+      // Обработчик кликов по папкам
+      var folders = list.querySelectorAll('.file-item.folder');
+      for (var j = 0; j < folders.length; j++) {
+        folders[j].addEventListener('click', function() {
+          var p = this.getAttribute('data-path');
+          navigate(p);
+        });
+      }
+
     } catch (err) {
       list.innerHTML = '<div class="status error">❌ Сетевая ошибка: ' + escapeHtml(err.message) + '</div>';
     }
@@ -125,43 +146,30 @@
     loadFolder();
   }
 
-function downloadFile(path) {
-  const params = new URLSearchParams({ action: 'fetch', public_key: currentKey });
-  if (path && path !== '/') params.set('path', path);
-  
-  var a = document.createElement('a');
-  a.href = '/api/proxy?' + params.toString();
-  a.download = '';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-
   function renderBreadcrumbs() {
-    const bc = document.getElementById('breadcrumbs');
+    var bc = document.getElementById('breadcrumbs');
     if (currentPath === '/') {
       bc.innerHTML = '<a onclick="navigate(\'/\')">🏠 Корень</a>';
       return;
     }
-    const parts = currentPath.split('/').filter(Boolean);
-    let html = '<a onclick="navigate(\'/\')">🏠 Корень</a>';
-    let accumulated = '';
-    parts.forEach((p, i) => {
-      accumulated += '/' + p;
+    var parts = currentPath.split('/').filter(Boolean);
+    var html = '<a onclick="navigate(\'/\')">🏠 Корень</a>';
+    var accumulated = '';
+    for (var i = 0; i < parts.length; i++) {
+      accumulated += '/' + parts[i];
       html += ' <span>/</span> ';
       if (i === parts.length - 1) {
-        html += '<span style="color:#eee">' + escapeHtml(decodeURIComponent(p)) + '</span>';
+        html += '<span style="color:#eee">' + escapeHtml(decodeURIComponent(parts[i])) + '</span>';
       } else {
-        html += '<a onclick="navigate(\'' + escapeAttr(accumulated) + '\')">' + escapeHtml(decodeURIComponent(p)) + '</a>';
+        html += '<a onclick="navigate(\'' + escapeAttr(accumulated) + '\')">' + escapeHtml(decodeURIComponent(parts[i])) + '</a>';
       }
-    });
+    }
     bc.innerHTML = html;
   }
 
   function getFileIcon(name) {
-    const ext = (name.split('.').pop() || '').toLowerCase();
-    const icons = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📎', pptx:'📎', jpg:'🖼', jpeg:'🖼', png:'🖼', gif:'🖼', svg:'🖼', mp4:'🎬', avi:'🎬', mkv:'🎬', mp3:'🎵', wav:'🎵', zip:'📦', rar:'📦', '7z':'📦', tar:'📦', gz:'📦', txt:'📃', py:'🐍', js:'📜', html:'🌐', css:'🎨', json:'📋' };
+    var ext = (name.split('.').pop() || '').toLowerCase();
+    var icons = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📎', pptx:'📎', jpg:'🖼', jpeg:'🖼', png:'🖼', gif:'🖼', svg:'🖼', mp4:'🎬', avi:'🎬', mkv:'🎬', mp3:'🎵', wav:'🎵', zip:'📦', rar:'📦', '7z':'📦', tar:'📦', gz:'📦', txt:'📃', py:'🐍', js:'📜', html:'🌐', css:'🎨', json:'📋' };
     return icons[ext] || '📄';
   }
 
@@ -173,8 +181,13 @@ function downloadFile(path) {
     return (bytes / 1073741824).toFixed(2) + ' GB';
   }
 
-  function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function escapeAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
 </script>
 </body>
 </html>
