@@ -125,11 +125,18 @@
     loadFolder();
   }
 
-  async function downloadFile(path) {
-    const params = new URLSearchParams({ action: 'fetch', public_key: currentKey });
-    if (path && path !== '/') params.set('path', path);
-    window.open('/api/proxy?' + params.toString(), '_blank');
-  }
+function downloadFile(path) {
+  const params = new URLSearchParams({ action: 'fetch', public_key: currentKey });
+  if (path && path !== '/') params.set('path', path);
+  
+  var a = document.createElement('a');
+  a.href = '/api/proxy?' + params.toString();
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 
   function renderBreadcrumbs() {
     const bc = document.getElementById('breadcrumbs');
